@@ -85,16 +85,29 @@ class WebhookViewSet(viewsets.ViewSet):
         serializer = WebhookCallSerializer(data=webhook_data)
 
         if serializer.is_valid():
-            # Create or update call record
-            call = serializer.save()
+            try:
+                # Create or update call record
+                call = serializer.save()
 
-            # Return success response
-            return Response({
-                'status': 'success',
-                'message': 'Call data received successfully',
-                'call_id': call.call_id,
-                'created': True
-            }, status=status.HTTP_201_CREATED)
+                # Return success response
+                return Response({
+                    'status': 'success',
+                    'message': 'Call data received successfully',
+                    'call_id': call.call_id,
+                    'created': True
+                }, status=status.HTTP_201_CREATED)
+
+            except Exception as e:
+                # Log save errors
+                print(f"[ERROR] Failed to save call: {str(e)}")
+                import traceback
+                print(f"[ERROR] Traceback: {traceback.format_exc()}")
+
+                return Response({
+                    'status': 'error',
+                    'message': 'Failed to save call data',
+                    'error': str(e)
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         else:
             # Log validation errors
