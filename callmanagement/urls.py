@@ -17,6 +17,9 @@ urlpatterns = [
     # Webhook endpoint for Tata Dealer
     path('webhook/', WebhookViewSet.as_view({'post': 'create'}), name='webhook'),
 
+    # Alias for incoming-calls (same as webhook)
+    path('incoming-calls/', WebhookViewSet.as_view({'post': 'create'}), name='incoming-calls'),
+
     # Include router URLs
     path('', include(router.urls)),
 ]
