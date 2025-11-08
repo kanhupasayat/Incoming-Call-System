@@ -14,7 +14,7 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-this-in-produc
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = ['*']  # Render will set proper hosts via environment
+ALLOWED_HOSTS = ['*', 'incoming-call-system.onrender.com', 'localhost', '127.0.0.1']
 
 # Application definition
 INSTALLED_APPS = [
@@ -126,6 +126,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 # CSRF settings - Exempt webhook endpoints
 CSRF_TRUSTED_ORIGINS = [
+    'https://incoming-call-system.onrender.com',
     'https://4cb974d4a823.ngrok-free.app',
     'https://85db735a6b8d.ngrok-free.app',
     'https://f978ee599cee.ngrok-free.app'
