@@ -1,0 +1,103 @@
+{
+  "success": true,
+  "total_calls": 2,
+  "message": "Calls retrieved successfully",
+  "data": [
+    {
+      "call_info": {
+        "call_id": "CALL-001",
+        "call_sid": "SID-123456",
+        "status": "completed",
+        "start_time": "2025-11-07 10:30:00",
+        "end_time": "2025-11-07 10:35:00",
+        "duration_seconds": 300,
+        "duration_formatted": "5m 0s",
+        "recording_url": "https://example.com/recording.mp3"
+      },
+      "caller_info": {
+        "phone_number": "+919876543210",
+        "name": "Raj Kumar"
+      },
+      "staff_info": {
+        "name": "Amit Sharma",
+        "id": "EMP001"
+      },
+      "customer_info": {
+        "name": "Raj Kumar",
+        "email": "raj.kumar@example.com",
+        "address": "Delhi, India"
+      },
+      "disposition": {
+        "code": "SALES_INQ",
+        "name": "Sales Inquiry",
+        "category": "sales",
+        "notes": "Customer interested in Nexon EV Max variant"
+      },
+      "vehicle_interest": {
+        "model": "Nexon EV",
+        "variant": "Max"
+      },
+      "lead_info": {
+        "is_lead": true,
+        "quality": "hot",
+        "quality_label": "Hot Lead - High Priority"
+      },
+      "notes": [
+        {
+          "note": "Customer will visit showroom tomorrow",
+          "created_by": "Amit Sharma",
+          "created_at": "2025-11-07 10:36:00"
+        }
+      ],
+      "metadata": {
+        "created_at": "2025-11-07 10:35:10",
+        "updated_at": "2025-11-07 10:36:05"
+      }
+    },
+    {
+      "call_info": {
+        "call_id": "CALL-002",
+        "call_sid": "SID-123457",
+        "status": "completed",
+        "start_time": "2025-11-07 11:15:00",
+        "end_time": "2025-11-07 11:18:00",
+        "duration_seconds": 180,
+        "duration_formatted": "3m 0s",
+        "recording_url": null
+      },
+      "caller_info": {
+        "phone_number": "+919876543211",
+        "name": "Priya Sharma"
+      },
+      "staff_info": {
+        "name": "Rahul Verma",
+        "id": "EMP002"
+      },
+      "customer_info": {
+        "name": "Priya Sharma",
+        "email": null,
+        "address": null
+      },
+      "disposition": {
+        "code": "TEST_DRIVE",
+        "name": "Test Drive Request",
+        "category": "test_drive",
+        "notes": "Test drive scheduled for tomorrow 3 PM"
+      },
+      "vehicle_interest": {
+        "model": "Harrier",
+        "variant": "XZ+"
+      },
+      "lead_info": {
+        "is_lead": true,
+        "quality": "warm",
+        "quality_label": "Warm Lead - Medium Priority"
+      },
+      "notes": [],
+      "metadata": {
+        "created_at": "2025-11-07 11:18:10",
+        "updated_at": "2025-11-07 11:18:10"
+      }
+    }
+  ]
+}

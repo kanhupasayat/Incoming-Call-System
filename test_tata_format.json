@@ -1,0 +1,28 @@
+{
+  "call_id": "1762531956.14871",
+  "call_to_number": "+918065907726",
+  "caller_id_number": "+916370997812",
+  "start_stamp": "2025-11-07T10:42:36+05:30",
+  "start_date": "2025-11-07",
+  "start_time": "21:42:36",
+  "end_stamp": "2025-11-07T10:42:46+05:30",
+  "end_date": "2025-11-07",
+  "end_time": "21:42:46",
+  "direction": "inbound",
+  "duration": "11",
+  "agent": {
+    "name": "Chitra",
+    "id": "0506796550034",
+    "number": "+917828819956",
+    "extension": "0606796550034"
+  },
+  "agent_name": "Chitra",
+  "agent_number": "+917828819956",
+  "disposition": {
+    "name": "Regarding Order Status",
+    "code": "D01",
+    "note": ""
+  },
+  "recording_url": "https://cloudphone.tatateleservices.com/file/recording?callId=1762531956.14871",
+  "call_status": "Answered"
+}

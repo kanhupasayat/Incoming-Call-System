@@ -1,0 +1,237 @@
+from rest_framework import serializers
+from .models import IncomingCall, CallDisposition, CallNote
+
+
+class CallDispositionSerializer(serializers.ModelSerializer):
+    """Serializer for CallDisposition model"""
+
+    class Meta:
+        model = CallDisposition
+        fields = [
+            'id', 'code', 'name', 'description', 'category',
+            'is_active', 'requires_followup', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class CallNoteSerializer(serializers.ModelSerializer):
+    """Serializer for CallNote model"""
+
+    class Meta:
+        model = CallNote
+        fields = ['id', 'call', 'note', 'created_by', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class IncomingCallSerializer(serializers.ModelSerializer):
+    """Serializer for IncomingCall model"""
+
+    disposition_details = CallDispositionSerializer(source='disposition', read_only=True)
+    notes = CallNoteSerializer(many=True, read_only=True)
+    call_duration_formatted = serializers.CharField(source='get_call_duration_formatted', read_only=True)
+
+    class Meta:
+        model = IncomingCall
+        fields = [
+            'id', 'call_id', 'call_sid', 'caller_number', 'caller_name',
+            'call_start_time', 'call_end_time', 'call_duration', 'call_duration_formatted',
+            'call_status', 'staff_name', 'staff_id', 'recording_url',
+            'disposition', 'disposition_details', 'disposition_notes',
+            'customer_name', 'customer_email', 'customer_address',
+            'vehicle_model', 'vehicle_variant',
+            'is_lead', 'lead_quality',
+            'raw_webhook_data', 'notes',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class WebhookCallSerializer(serializers.Serializer):
+    """Serializer for incoming webhook data from Tata Dealer"""
+
+    # Required fields
+    call_id = serializers.CharField(required=False, max_length=100)
+    caller_number = serializers.CharField(required=False, max_length=20)
+    call_start_time = serializers.DateTimeField(required=False)
+
+    # Optional fields
+    call_sid = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    caller_name = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    call_end_time = serializers.DateTimeField(required=False, allow_null=True)
+    call_duration = serializers.IntegerField(required=False, default=0)
+    call_status = serializers.CharField(required=False, allow_blank=True, max_length=50)
+
+    # Staff information
+    staff_name = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    staff_id = serializers.CharField(required=False, allow_blank=True, max_length=50)
+
+    # Recording
+    recording_url = serializers.URLField(required=False, allow_blank=True, max_length=500)
+
+    # Disposition
+    disposition_code = serializers.CharField(required=False, allow_blank=True, max_length=50)
+    disposition_notes = serializers.CharField(required=False, allow_blank=True)
+
+    # Customer information
+    customer_name = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    customer_email = serializers.EmailField(required=False, allow_blank=True)
+    customer_address = serializers.CharField(required=False, allow_blank=True)
+
+    # Vehicle interest
+    vehicle_model = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    vehicle_variant = serializers.CharField(required=False, allow_blank=True, max_length=100)
+
+    # Lead information
+    is_lead = serializers.BooleanField(required=False, default=False)
+    lead_quality = serializers.ChoiceField(
+        choices=['hot', 'warm', 'cold'],
+        required=False,
+        allow_blank=True
+    )
+
+    def validate(self, data):
+        """
+        Custom validation to handle both formats:
+        1. Standard format (call_id, caller_number, call_start_time)
+        2. Tata Dealer format (call_id, caller_id_number, start_stamp, agent, disposition dict)
+        """
+
+        # Normalize Tata Dealer format to standard format
+        if 'caller_id_number' in self.initial_data:
+            data['caller_number'] = self.initial_data.get('caller_id_number')
+
+        if 'start_stamp' in self.initial_data:
+            # Fix Tata's datetime format: "2025-11-07T12:42:23 05:30" -> "2025-11-07T12:42:23+05:30"
+            start_stamp = self.initial_data.get('start_stamp')
+            if start_stamp:
+                start_stamp = str(start_stamp)
+                # Fix timezone format if space exists
+                if ' ' in start_stamp and start_stamp.count(':') >= 2:
+                    parts = start_stamp.rsplit(' ', 1)
+                    if len(parts) == 2 and ':' in parts[1]:
+                        start_stamp = parts[0] + '+' + parts[1]
+                data['call_start_time'] = start_stamp
+            else:
+                data['call_start_time'] = None
+
+        if 'end_stamp' in self.initial_data:
+            # Fix Tata's datetime format
+            end_stamp = self.initial_data.get('end_stamp')
+            if end_stamp:
+                end_stamp = str(end_stamp)
+                # Fix timezone format if space exists
+                if ' ' in end_stamp and end_stamp.count(':') >= 2:
+                    parts = end_stamp.rsplit(' ', 1)
+                    if len(parts) == 2 and ':' in parts[1]:
+                        end_stamp = parts[0] + '+' + parts[1]
+                data['call_end_time'] = end_stamp
+            else:
+                data['call_end_time'] = None
+
+        if 'duration' in self.initial_data:
+            try:
+                data['call_duration'] = int(self.initial_data.get('duration'))
+            except (ValueError, TypeError):
+                pass
+
+        # Handle agent data (from Tata format)
+        if 'agent' in self.initial_data and isinstance(self.initial_data['agent'], dict):
+            agent = self.initial_data['agent']
+            data['staff_name'] = str(agent.get('name', ''))[:200] if agent.get('name') else None
+            data['staff_id'] = str(agent.get('id', ''))[:50] if agent.get('id') else None
+        elif 'agent_name' in self.initial_data:
+            agent_name = self.initial_data.get('agent_name')
+            data['staff_name'] = str(agent_name)[:200] if agent_name else None
+
+        # Handle disposition data (from Tata format - it's a dict)
+        if 'disposition' in self.initial_data and isinstance(self.initial_data['disposition'], dict):
+            disp = self.initial_data['disposition']
+            disp_code = disp.get('code')
+            data['disposition_code'] = str(disp_code)[:50] if disp_code else None
+            # Disposition notes can be long, no truncation needed (TextField)
+            data['disposition_notes'] = disp.get('note', '') or disp.get('name', '')
+
+        # Handle call status mapping (case-insensitive)
+        if 'call_status' in self.initial_data:
+            status = str(self.initial_data['call_status']).lower().strip()
+
+            # Map various statuses to our standard ones
+            status_mapping = {
+                'answered': 'completed',
+                'completed': 'completed',
+                'ringing': 'ringing',
+                'busy': 'busy',
+                'no-answer': 'no-answer',
+                'noanswer': 'no-answer',
+                'no answer': 'no-answer',
+                'failed': 'failed',
+                'hangup': 'completed',
+                'disconnected': 'completed'
+            }
+
+            data['call_status'] = status_mapping.get(status, 'completed')
+
+        # Handle recording URL
+        if 'recording_url' in self.initial_data:
+            data['recording_url'] = self.initial_data.get('recording_url')
+
+        # Validation: Ensure required fields are present
+        if not data.get('call_id'):
+            raise serializers.ValidationError({'call_id': 'This field is required.'})
+
+        if not data.get('caller_number'):
+            raise serializers.ValidationError({'caller_number': 'This field is required (caller_number or caller_id_number).'})
+
+        if not data.get('call_start_time'):
+            raise serializers.ValidationError({'call_start_time': 'This field is required (call_start_time or start_stamp).'})
+
+        return data
+
+    def create(self, validated_data):
+        """Create or update IncomingCall from webhook data"""
+
+        # Extract disposition code and get disposition object
+        disposition_code = validated_data.pop('disposition_code', None)
+        disposition = None
+
+        if disposition_code:
+            # Auto-create CallDisposition if it doesn't exist
+            disposition_name = validated_data.get('disposition_notes', disposition_code)
+            disposition, created = CallDisposition.objects.get_or_create(
+                code=disposition_code,
+                defaults={
+                    'name': disposition_name,
+                    'description': f'Auto-created from Tata webhook: {disposition_name}',
+                    'category': 'other',
+                    'is_active': True
+                }
+            )
+
+        # Store raw data
+        raw_data = self.initial_data
+
+        # Get or create the call
+        call, created = IncomingCall.objects.update_or_create(
+            call_id=validated_data['call_id'],
+            defaults={
+                **validated_data,
+                'disposition': disposition,
+                'raw_webhook_data': raw_data
+            }
+        )
+
+        return call
+
+
+class CallStatsSerializer(serializers.Serializer):
+    """Serializer for call statistics"""
+
+    total_calls = serializers.IntegerField()
+    answered_calls = serializers.IntegerField()
+    missed_calls = serializers.IntegerField()
+    total_duration = serializers.IntegerField()
+    average_duration = serializers.FloatField()
+    total_leads = serializers.IntegerField()
+    hot_leads = serializers.IntegerField()
+    warm_leads = serializers.IntegerField()
+    cold_leads = serializers.IntegerField()
