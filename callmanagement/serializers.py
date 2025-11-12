@@ -324,17 +324,36 @@ class WebhookCallSerializer(serializers.Serializer):
                 print(f"[DEBUG]   - Caller: '{mc.caller_number}' (length: {len(mc.caller_number)})")
 
             # Try to find a matching incoming call - match with or without country code
-            # Only get incoming calls that DON'T have a callback yet (contacted_at is NULL)
-            related_incoming_call = IncomingCall.objects.filter(
+            # Get the LATEST call from this number to check its status
+            latest_call = IncomingCall.objects.filter(
                 call_direction='inbound',
-                call_status__in=['missed', 'no-answer', 'busy'],
-                call_start_time__gte=cutoff_date,
-                contacted_at__isnull=True  # Only get calls that haven't been called back yet
+                call_start_time__gte=cutoff_date
             ).filter(
                 Q(caller_number=customer_number) |
                 Q(caller_number__endswith=customer_number[-10:] if len(customer_number) >= 10 else customer_number) |
                 Q(caller_number__contains=customer_number)
-            ).first()
+            ).order_by('-call_start_time').first()
+
+            # Check if latest call is still missed/pending
+            # If latest call is completed/answered, no need for callback
+            if latest_call:
+                print(f"[DEBUG] Latest call status: {latest_call.call_status}, contacted_at: {latest_call.contacted_at}")
+                if latest_call.call_status not in ['missed', 'no-answer', 'busy']:
+                    # Latest call was answered/completed - no callback needed
+                    print(f"[INFO] Ignoring outbound - latest call status is '{latest_call.call_status}' (not missed)")
+                    raise serializers.ValidationError({
+                        'call_direction': 'Outbound call ignored - latest call is not missed'
+                    })
+                if latest_call.contacted_at is not None:
+                    # Already contacted
+                    print(f"[INFO] Ignoring outbound - already contacted at {latest_call.contacted_at}")
+                    raise serializers.ValidationError({
+                        'call_direction': 'Outbound call ignored - already contacted'
+                    })
+                # Use this as the related incoming call
+                related_incoming_call = latest_call
+            else:
+                related_incoming_call = None
 
             if not related_incoming_call:
                 # No related missed incoming call found (or already contacted)
