@@ -324,10 +324,12 @@ class WebhookCallSerializer(serializers.Serializer):
                 print(f"[DEBUG]   - Caller: '{mc.caller_number}' (length: {len(mc.caller_number)})")
 
             # Try to find a matching incoming call - match with or without country code
+            # Only get incoming calls that DON'T have a callback yet (contacted_at is NULL)
             related_incoming_call = IncomingCall.objects.filter(
                 call_direction='inbound',
                 call_status__in=['missed', 'no-answer', 'busy'],
-                call_start_time__gte=cutoff_date
+                call_start_time__gte=cutoff_date,
+                contacted_at__isnull=True  # Only get calls that haven't been called back yet
             ).filter(
                 Q(caller_number=customer_number) |
                 Q(caller_number__endswith=customer_number[-10:] if len(customer_number) >= 10 else customer_number) |
@@ -335,10 +337,10 @@ class WebhookCallSerializer(serializers.Serializer):
             ).first()
 
             if not related_incoming_call:
-                # No related missed incoming call found - raise validation error to skip
-                print(f"[INFO] Ignoring outbound call to {customer_number} - no related missed incoming call")
+                # No related missed incoming call found (or already contacted)
+                print(f"[INFO] Ignoring outbound call to {customer_number} - no pending missed incoming call (either no missed call or already contacted)")
                 raise serializers.ValidationError({
-                    'call_direction': 'Outbound call ignored - no related missed incoming call found'
+                    'call_direction': 'Outbound call ignored - no pending missed incoming call found'
                 })
 
             # Mark as callback
@@ -346,6 +348,10 @@ class WebhookCallSerializer(serializers.Serializer):
             # Set contacted_at to current time (when callback is being made)
             # Don't use call_start_time as it might be a string
             data['contacted_at'] = timezone.now()
+
+            # Store related incoming call ID so we can update it in create()
+            data['_related_incoming_call_id'] = related_incoming_call.id
+
             print(f"[INFO] Saving outbound callback to {customer_number} for missed call {related_incoming_call.call_id}")
 
         return data
@@ -374,6 +380,9 @@ class WebhookCallSerializer(serializers.Serializer):
         # Store raw data
         raw_data = self.initial_data
 
+        # Check if this is a callback (has related incoming call ID)
+        related_incoming_call_id = validated_data.pop('_related_incoming_call_id', None)
+
         # SAVE INBOUND CALLS and VALID OUTBOUND CALLBACKS
         # (Outbound filtering already done in validate())
         # Get or create the call
@@ -385,6 +394,16 @@ class WebhookCallSerializer(serializers.Serializer):
                 'raw_webhook_data': raw_data
             }
         )
+
+        # If this is a callback, update the related incoming call's contacted_at
+        if related_incoming_call_id:
+            try:
+                related_incoming_call = IncomingCall.objects.get(id=related_incoming_call_id)
+                related_incoming_call.contacted_at = timezone.now()
+                related_incoming_call.save(update_fields=['contacted_at'])
+                print(f"[INFO] Updated incoming call {related_incoming_call.call_id} with contacted_at timestamp")
+            except IncomingCall.DoesNotExist:
+                print(f"[WARNING] Could not find related incoming call with id {related_incoming_call_id}")
 
         return call
 
