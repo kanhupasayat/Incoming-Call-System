@@ -109,7 +109,7 @@ class WebhookCallSerializer(serializers.Serializer):
         if 'start_stamp' in self.initial_data:
             # Fix Tata's datetime format: "2025-11-07T12:42:23 05:30" -> "2025-11-07T12:42:23+05:30"
             start_stamp = self.initial_data.get('start_stamp')
-            if start_stamp:
+            if start_stamp and str(start_stamp).lower() not in ['invalid date', 'none', '']:
                 start_stamp = str(start_stamp)
                 # Fix timezone format if space exists
                 if ' ' in start_stamp and start_stamp.count(':') >= 2:
@@ -118,12 +118,30 @@ class WebhookCallSerializer(serializers.Serializer):
                         start_stamp = parts[0] + '+' + parts[1]
                 data['call_start_time'] = start_stamp
             else:
-                data['call_start_time'] = None
+                # Invalid start_stamp - try to build from start_date + start_time
+                if 'start_date' in self.initial_data and 'start_time' in self.initial_data:
+                    start_date = self.initial_data.get('start_date')
+                    start_time = self.initial_data.get('start_time')
+                    if start_date and start_time:
+                        # Combine date and time: "2025-11-13" + "24:51:54" -> "2025-11-13T00:51:54+05:30"
+                        # Handle invalid time like "24:51:54" (should be "00:51:54")
+                        time_parts = str(start_time).split(':')
+                        if len(time_parts) == 3:
+                            hour = int(time_parts[0]) % 24  # Fix hour >= 24
+                            fixed_time = f"{hour:02d}:{time_parts[1]}:{time_parts[2]}"
+                            data['call_start_time'] = f"{start_date}T{fixed_time}+05:30"
+                            print(f"[INFO] Fixed invalid start_stamp using start_date+start_time: {data['call_start_time']}")
+                        else:
+                            data['call_start_time'] = None
+                    else:
+                        data['call_start_time'] = None
+                else:
+                    data['call_start_time'] = None
 
         if 'end_stamp' in self.initial_data:
             # Fix Tata's datetime format
             end_stamp = self.initial_data.get('end_stamp')
-            if end_stamp:
+            if end_stamp and str(end_stamp).lower() not in ['invalid date', 'none', '']:
                 end_stamp = str(end_stamp)
                 # Fix timezone format if space exists
                 if ' ' in end_stamp and end_stamp.count(':') >= 2:
@@ -132,7 +150,22 @@ class WebhookCallSerializer(serializers.Serializer):
                         end_stamp = parts[0] + '+' + parts[1]
                 data['call_end_time'] = end_stamp
             else:
-                data['call_end_time'] = None
+                # Invalid end_stamp - try to build from end_date + end_time
+                if 'end_date' in self.initial_data and 'end_time' in self.initial_data:
+                    end_date = self.initial_data.get('end_date')
+                    end_time = self.initial_data.get('end_time')
+                    if end_date and end_time:
+                        time_parts = str(end_time).split(':')
+                        if len(time_parts) == 3:
+                            hour = int(time_parts[0]) % 24  # Fix hour >= 24
+                            fixed_time = f"{hour:02d}:{time_parts[1]}:{time_parts[2]}"
+                            data['call_end_time'] = f"{end_date}T{fixed_time}+05:30"
+                        else:
+                            data['call_end_time'] = None
+                    else:
+                        data['call_end_time'] = None
+                else:
+                    data['call_end_time'] = None
 
         if 'duration' in self.initial_data:
             try:
