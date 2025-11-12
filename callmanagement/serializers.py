@@ -35,7 +35,8 @@ class IncomingCallSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'call_id', 'call_sid', 'caller_number', 'caller_name',
             'call_start_time', 'call_end_time', 'call_duration', 'call_duration_formatted',
-            'call_status', 'staff_name', 'staff_id', 'recording_url',
+            'call_status', 'call_direction', 'is_callback', 'contacted_at',
+            'staff_name', 'staff_id', 'recording_url',
             'disposition', 'disposition_details', 'disposition_notes',
             'customer_name', 'customer_email', 'customer_address',
             'vehicle_model', 'vehicle_variant',
@@ -60,6 +61,9 @@ class WebhookCallSerializer(serializers.Serializer):
     call_end_time = serializers.DateTimeField(required=False, allow_null=True)
     call_duration = serializers.IntegerField(required=False, default=0)
     call_status = serializers.CharField(required=False, allow_blank=True, max_length=50)
+
+    # Call direction
+    call_direction = serializers.CharField(required=False, allow_blank=True, max_length=20)
 
     # Staff information
     staff_name = serializers.CharField(required=False, allow_blank=True, max_length=200)
@@ -164,6 +168,10 @@ class WebhookCallSerializer(serializers.Serializer):
                 'no-answer': 'no-answer',
                 'noanswer': 'no-answer',
                 'no answer': 'no-answer',
+                'missed': 'missed',
+                'missed call': 'missed',
+                'not answered': 'missed',
+                'unanswered': 'missed',
                 'failed': 'failed',
                 'hangup': 'completed',
                 'disconnected': 'completed'
@@ -175,6 +183,22 @@ class WebhookCallSerializer(serializers.Serializer):
         if 'recording_url' in self.initial_data:
             data['recording_url'] = self.initial_data.get('recording_url')
 
+        # Handle call direction (normalize to lowercase)
+        # Map Tata's "direction" field to our call_direction
+        if 'direction' in self.initial_data:
+            direction = str(self.initial_data['direction']).lower().strip()
+            data['call_direction'] = 'inbound' if direction == 'inbound' else 'outbound'
+        elif 'call_direction' in self.initial_data:
+            direction = str(self.initial_data['call_direction']).lower().strip()
+            if direction in ['inbound', 'outbound']:
+                data['call_direction'] = direction
+            else:
+                # Default to inbound if not specified
+                data['call_direction'] = 'inbound'
+        else:
+            # Default to inbound
+            data['call_direction'] = 'inbound'
+
         # Validation: Ensure required fields are present
         if not data.get('call_id'):
             raise serializers.ValidationError({'call_id': 'This field is required.'})
@@ -182,13 +206,17 @@ class WebhookCallSerializer(serializers.Serializer):
         if not data.get('caller_number'):
             raise serializers.ValidationError({'caller_number': 'This field is required (caller_number or caller_id_number).'})
 
+        # For missed calls, start_time might not be present, use current time as fallback
         if not data.get('call_start_time'):
-            raise serializers.ValidationError({'call_start_time': 'This field is required (call_start_time or start_stamp).'})
+            from django.utils import timezone
+            data['call_start_time'] = timezone.now()
+            print("[INFO] call_start_time was missing, using current time for missed call")
 
         return data
 
     def create(self, validated_data):
         """Create or update IncomingCall from webhook data"""
+        from django.utils import timezone
 
         # Extract disposition code and get disposition object
         disposition_code = validated_data.pop('disposition_code', None)
@@ -210,6 +238,12 @@ class WebhookCallSerializer(serializers.Serializer):
         # Store raw data
         raw_data = self.initial_data
 
+        # Get call direction
+        call_direction = validated_data.get('call_direction', 'inbound')
+        caller_number = validated_data.get('caller_number')
+
+        # SAVE ALL CALLS - Both inbound and outbound
+        # User can filter later based on call_direction and call_status
         # Get or create the call
         call, created = IncomingCall.objects.update_or_create(
             call_id=validated_data['call_id'],

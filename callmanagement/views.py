@@ -89,11 +89,20 @@ class WebhookViewSet(viewsets.ViewSet):
                 # Create or update call record
                 call = serializer.save()
 
+                # Check if outbound call was ignored (no related incoming call)
+                if call is None:
+                    return Response({
+                        'status': 'ignored',
+                        'message': 'Outbound call ignored - no related incoming call found',
+                    }, status=status.HTTP_200_OK)
+
                 # Return success response
                 return Response({
                     'status': 'success',
                     'message': 'Call data received successfully',
                     'call_id': call.call_id,
+                    'call_direction': call.call_direction,
+                    'is_callback': call.is_callback,
                     'created': True
                 }, status=status.HTTP_201_CREATED)
 
@@ -225,6 +234,55 @@ class IncomingCallViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(recent_calls, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def pending(self, request):
+        """Get pending calls that need follow-up (no disposition yet)"""
+
+        # Get all calls without disposition (both inbound and outbound missed calls)
+        pending_calls = IncomingCall.objects.filter(
+            disposition__isnull=True
+        ).order_by('-call_start_time')
+
+        # Apply pagination
+        page = self.paginate_queryset(pending_calls)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(pending_calls, many=True)
+        return Response({
+            'status': 'success',
+            'total_pending': pending_calls.count(),
+            'data': serializer.data
+        })
+
+    @action(detail=False, methods=['get'])
+    def missed(self, request):
+        """Get all missed calls"""
+
+        # Get all missed/no-answer calls
+        missed_calls = IncomingCall.objects.filter(
+            Q(call_status='no-answer') | Q(call_status='busy') | Q(call_status='missed')
+        ).order_by('-call_start_time')
+
+        # Apply date filter if provided
+        days = int(request.query_params.get('days', 30))
+        start_date = datetime.now() - timedelta(days=days)
+        missed_calls = missed_calls.filter(call_start_time__gte=start_date)
+
+        # Apply pagination
+        page = self.paginate_queryset(missed_calls)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(missed_calls, many=True)
+        return Response({
+            'status': 'success',
+            'total_missed': missed_calls.count(),
+            'data': serializer.data
+        })
 
     @action(detail=True, methods=['post'])
     def add_note(self, request, pk=None):

@@ -26,10 +26,33 @@ class IncomingCall(models.Model):
             ('answered', 'Answered'),
             ('busy', 'Busy'),
             ('no-answer', 'No Answer'),
+            ('missed', 'Missed'),
             ('failed', 'Failed'),
             ('completed', 'Completed'),
         ],
         default='ringing'
+    )
+
+    # Call direction and type
+    call_direction = models.CharField(
+        max_length=20,
+        choices=[
+            ('inbound', 'Inbound'),
+            ('outbound', 'Outbound'),
+        ],
+        default='inbound',
+        help_text="Direction of call - inbound (customer to staff) or outbound (staff to customer)"
+    )
+
+    # Callback tracking
+    is_callback = models.BooleanField(
+        default=False,
+        help_text="Is this a callback for a missed/pending incoming call?"
+    )
+    contacted_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="When staff contacted back for this call"
     )
 
     # Staff who handled the call
