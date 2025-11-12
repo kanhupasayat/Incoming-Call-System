@@ -217,6 +217,7 @@ class WebhookCallSerializer(serializers.Serializer):
     def create(self, validated_data):
         """Create or update IncomingCall from webhook data"""
         from django.utils import timezone
+        from datetime import timedelta
 
         # Extract disposition code and get disposition object
         disposition_code = validated_data.pop('disposition_code', None)
@@ -242,8 +243,30 @@ class WebhookCallSerializer(serializers.Serializer):
         call_direction = validated_data.get('call_direction', 'inbound')
         caller_number = validated_data.get('caller_number')
 
-        # SAVE ALL CALLS - Both inbound and outbound
-        # User can filter later based on call_direction and call_status
+        # FILTER OUTBOUND CALLS: Only save if it's a callback for a missed incoming call
+        if call_direction == 'outbound':
+            # Check if there's a recent missed incoming call from this number
+            # Look for missed calls in the last 1 day (24 hours)
+            cutoff_date = timezone.now() - timedelta(days=1)
+
+            related_incoming_call = IncomingCall.objects.filter(
+                caller_number=caller_number,
+                call_direction='inbound',
+                call_status__in=['missed', 'no-answer', 'busy'],
+                call_start_time__gte=cutoff_date
+            ).first()
+
+            if not related_incoming_call:
+                # No related missed incoming call found - ignore this outbound call
+                print(f"[INFO] Ignoring outbound call to {caller_number} - no related missed incoming call")
+                return None
+
+            # This is a callback for a missed call - mark it as such
+            validated_data['is_callback'] = True
+            validated_data['contacted_at'] = validated_data.get('call_start_time', timezone.now())
+            print(f"[INFO] Saving outbound callback to {caller_number} for missed call {related_incoming_call.call_id}")
+
+        # SAVE INBOUND CALLS and VALID OUTBOUND CALLBACKS
         # Get or create the call
         call, created = IncomingCall.objects.update_or_create(
             call_id=validated_data['call_id'],
