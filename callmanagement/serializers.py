@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db.models import Q
 from .models import IncomingCall, CallDisposition, CallNote
 
 
@@ -238,20 +239,41 @@ class WebhookCallSerializer(serializers.Serializer):
 
         if call_direction == 'outbound':
             from django.utils import timezone
-            # Check if there's a recent missed incoming call from this number
+            # For outbound calls:
+            # - caller_number/caller_id_number = Staff's number (who is calling)
+            # - call_to_number = Customer's number (who is being called)
+            # We need to check if this customer had a recent missed incoming call
+
+            # Get the customer number from call_to_number field
+            customer_number = self.initial_data.get('call_to_number')
+
+            if not customer_number:
+                # Fallback: use caller_number if call_to_number not found
+                customer_number = caller_number
+
+            # Normalize phone number (remove spaces, add prefix if needed)
+            customer_number = str(customer_number).strip()
+
+            print(f"[DEBUG] Outbound call: Staff {caller_number} calling customer {customer_number}")
+
+            # Check if there's a recent missed incoming call from this customer number
             # Look for missed calls in the last 1 day (24 hours)
             cutoff_date = timezone.now() - timedelta(days=1)
 
+            # Try to find a matching incoming call - match with or without country code
             related_incoming_call = IncomingCall.objects.filter(
-                caller_number=caller_number,
                 call_direction='inbound',
                 call_status__in=['missed', 'no-answer', 'busy'],
                 call_start_time__gte=cutoff_date
+            ).filter(
+                Q(caller_number=customer_number) |
+                Q(caller_number__endswith=customer_number[-10:]) |  # Match last 10 digits
+                Q(caller_number__contains=customer_number)
             ).first()
 
             if not related_incoming_call:
                 # No related missed incoming call found - raise validation error to skip
-                print(f"[INFO] Ignoring outbound call to {caller_number} - no related missed incoming call")
+                print(f"[INFO] Ignoring outbound call to {customer_number} - no related missed incoming call")
                 raise serializers.ValidationError({
                     'call_direction': 'Outbound call ignored - no related missed incoming call found'
                 })
@@ -259,7 +281,7 @@ class WebhookCallSerializer(serializers.Serializer):
             # Mark as callback
             data['is_callback'] = True
             data['contacted_at'] = data.get('call_start_time', timezone.now())
-            print(f"[INFO] Saving outbound callback to {caller_number} for missed call {related_incoming_call.call_id}")
+            print(f"[INFO] Saving outbound callback to {customer_number} for missed call {related_incoming_call.call_id}")
 
         return data
 
