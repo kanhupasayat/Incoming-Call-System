@@ -260,6 +260,22 @@ class WebhookCallSerializer(serializers.Serializer):
             # Look for missed calls in the last 1 day (24 hours)
             cutoff_date = timezone.now() - timedelta(days=1)
 
+            # Debug: Show what we're searching for
+            print(f"[DEBUG] Searching for incoming missed calls since {cutoff_date}")
+            print(f"[DEBUG] Customer number to match: '{customer_number}' (length: {len(customer_number)})")
+            if len(customer_number) >= 10:
+                print(f"[DEBUG] Last 10 digits: '{customer_number[-10:]}'")
+
+            # Get all recent missed incoming calls for debugging
+            all_missed = IncomingCall.objects.filter(
+                call_direction='inbound',
+                call_status__in=['missed', 'no-answer', 'busy'],
+                call_start_time__gte=cutoff_date
+            )
+            print(f"[DEBUG] Found {all_missed.count()} missed incoming calls in last 24h")
+            for mc in all_missed[:5]:
+                print(f"[DEBUG]   - Caller: '{mc.caller_number}' (length: {len(mc.caller_number)})")
+
             # Try to find a matching incoming call - match with or without country code
             related_incoming_call = IncomingCall.objects.filter(
                 call_direction='inbound',
@@ -267,7 +283,7 @@ class WebhookCallSerializer(serializers.Serializer):
                 call_start_time__gte=cutoff_date
             ).filter(
                 Q(caller_number=customer_number) |
-                Q(caller_number__endswith=customer_number[-10:]) |  # Match last 10 digits
+                Q(caller_number__endswith=customer_number[-10:] if len(customer_number) >= 10 else customer_number) |
                 Q(caller_number__contains=customer_number)
             ).first()
 
