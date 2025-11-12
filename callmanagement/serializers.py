@@ -280,7 +280,9 @@ class WebhookCallSerializer(serializers.Serializer):
 
             # Mark as callback
             data['is_callback'] = True
-            data['contacted_at'] = data.get('call_start_time', timezone.now())
+            # Set contacted_at to current time (when callback is being made)
+            # Don't use call_start_time as it might be a string
+            data['contacted_at'] = timezone.now()
             print(f"[INFO] Saving outbound callback to {customer_number} for missed call {related_incoming_call.call_id}")
 
         return data
