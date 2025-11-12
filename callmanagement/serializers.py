@@ -103,8 +103,22 @@ class WebhookCallSerializer(serializers.Serializer):
         from datetime import timedelta
 
         # Normalize Tata Dealer format to standard format
-        if 'caller_id_number' in self.initial_data:
+        # For caller_number field:
+        # - Inbound call: caller_number = customer (who called us) = caller_id_number
+        # - Outbound call: caller_number = customer (who we called) = call_to_number
+
+        # First check direction to determine correct caller_number
+        direction = self.initial_data.get('direction', '').lower()
+
+        if direction == 'outbound' and 'call_to_number' in self.initial_data:
+            # Outbound: caller_number should be the customer we're calling
+            data['caller_number'] = self.initial_data.get('call_to_number')
+        elif 'caller_id_number' in self.initial_data:
+            # Inbound or default: caller_number is who called us
             data['caller_number'] = self.initial_data.get('caller_id_number')
+        else:
+            # Fallback
+            data['caller_number'] = self.initial_data.get('caller_id_number') or self.initial_data.get('call_to_number')
 
         if 'start_stamp' in self.initial_data:
             # Fix Tata's datetime format: "2025-11-07T12:42:23 05:30" -> "2025-11-07T12:42:23+05:30"
