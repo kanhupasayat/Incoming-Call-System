@@ -185,20 +185,39 @@ class WebhookCallSerializer(serializers.Serializer):
             data['recording_url'] = self.initial_data.get('recording_url')
 
         # Handle call direction (normalize to lowercase)
-        # Map Tata's "direction" field to our call_direction
+        # SMART DETECTION: Determine if call is inbound or outbound based on multiple factors
+
+        # Check if agent/staff information is present (indicates outbound call made by staff)
+        has_agent = False
+        if 'agent' in self.initial_data and self.initial_data['agent']:
+            if isinstance(self.initial_data['agent'], dict) and self.initial_data['agent'].get('name'):
+                has_agent = True
+        elif 'agent_name' in self.initial_data and self.initial_data.get('agent_name'):
+            has_agent = True
+        elif data.get('staff_name'):
+            has_agent = True
+
+        # If agent is present, it's an outbound call (staff calling customer)
+        # If no agent, it's an inbound call (customer calling)
+        if has_agent:
+            data['call_direction'] = 'outbound'
+            print(f"[INFO] Detected OUTBOUND call (staff present: {data.get('staff_name', 'Yes')})")
+        else:
+            # No agent/staff info = customer called us = inbound
+            data['call_direction'] = 'inbound'
+            print(f"[INFO] Detected INBOUND call (no staff info, customer: {data.get('caller_number')})")
+
+        # Override with explicit direction field if present (for manual specification)
         if 'direction' in self.initial_data:
             direction = str(self.initial_data['direction']).lower().strip()
-            data['call_direction'] = 'inbound' if direction == 'inbound' else 'outbound'
+            if direction in ['inbound', 'outbound']:
+                data['call_direction'] = direction
+                print(f"[INFO] Direction overridden by webhook field: {direction}")
         elif 'call_direction' in self.initial_data:
             direction = str(self.initial_data['call_direction']).lower().strip()
             if direction in ['inbound', 'outbound']:
                 data['call_direction'] = direction
-            else:
-                # Default to inbound if not specified
-                data['call_direction'] = 'inbound'
-        else:
-            # Default to inbound
-            data['call_direction'] = 'inbound'
+                print(f"[INFO] Direction overridden by webhook field: {direction}")
 
         # Validation: Ensure required fields are present
         if not data.get('call_id'):
