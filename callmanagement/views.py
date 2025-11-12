@@ -89,13 +89,6 @@ class WebhookViewSet(viewsets.ViewSet):
                 # Create or update call record
                 call = serializer.save()
 
-                # Check if outbound call was ignored (no related incoming call)
-                if call is None:
-                    return Response({
-                        'status': 'ignored',
-                        'message': 'Outbound call ignored - no related incoming call found',
-                    }, status=status.HTTP_200_OK)
-
                 # Return success response
                 return Response({
                     'status': 'success',
@@ -122,6 +115,13 @@ class WebhookViewSet(viewsets.ViewSet):
             # Log validation errors
             print(f"VALIDATION ERROR: {serializer.errors}")
             print(f"Received data was: {webhook_data}")
+
+            # Check if it's an ignored outbound call (not an actual error)
+            if 'call_direction' in serializer.errors and 'Outbound call ignored' in str(serializer.errors['call_direction']):
+                return Response({
+                    'status': 'ignored',
+                    'message': 'Outbound call ignored - no related missed incoming call found',
+                }, status=status.HTTP_200_OK)
 
             # Return validation errors
             return Response({
