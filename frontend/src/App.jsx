@@ -6,12 +6,19 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [copiedId, setCopiedId] = useState(null)
 
-  // Fetch pending calls (no disposition)
+  // Fetch missed calls that haven't been contacted yet
   const fetchPendingCalls = async () => {
     try {
-      const response = await fetch('/api/calls/pending/')
+      // Get missed incoming calls that haven't been contacted (contacted_at is null)
+      const response = await fetch('/api/incoming-calls/missed/')
       const data = await response.json()
-      setCalls(data.data || data.results || [])
+
+      // Filter to only show calls that haven't been contacted yet
+      const uncontactedCalls = (data.data || data.results || []).filter(
+        call => !call.contacted_at && call.call_direction === 'inbound'
+      )
+
+      setCalls(uncontactedCalls)
       setLoading(false)
     } catch (error) {
       console.error('Error fetching calls:', error)
