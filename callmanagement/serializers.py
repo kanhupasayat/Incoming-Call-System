@@ -368,8 +368,14 @@ class WebhookCallSerializer(serializers.Serializer):
             # Don't use call_start_time as it might be a string
             data['contacted_at'] = timezone.now()
 
-            # Store related incoming call ID so we can update it in create()
-            data['_related_incoming_call_id'] = related_incoming_call.id
+            # IMPORTANT: Update the related incoming call's contacted_at right here
+            # This ensures it gets updated before the response is sent
+            try:
+                related_incoming_call.contacted_at = timezone.now()
+                related_incoming_call.save(update_fields=['contacted_at'])
+                print(f"[SUCCESS] Updated incoming call {related_incoming_call.call_id} contacted_at = {related_incoming_call.contacted_at}")
+            except Exception as e:
+                print(f"[ERROR] Failed to update incoming call contacted_at: {e}")
 
             print(f"[INFO] Saving outbound callback to {customer_number} for missed call {related_incoming_call.call_id}")
 
@@ -399,11 +405,8 @@ class WebhookCallSerializer(serializers.Serializer):
         # Store raw data
         raw_data = self.initial_data
 
-        # Check if this is a callback (has related incoming call ID)
-        related_incoming_call_id = validated_data.pop('_related_incoming_call_id', None)
-
         # SAVE INBOUND CALLS and VALID OUTBOUND CALLBACKS
-        # (Outbound filtering already done in validate())
+        # (Outbound filtering and incoming call update already done in validate())
         # Get or create the call
         call, created = IncomingCall.objects.update_or_create(
             call_id=validated_data['call_id'],
@@ -413,16 +416,6 @@ class WebhookCallSerializer(serializers.Serializer):
                 'raw_webhook_data': raw_data
             }
         )
-
-        # If this is a callback, update the related incoming call's contacted_at
-        if related_incoming_call_id:
-            try:
-                related_incoming_call = IncomingCall.objects.get(id=related_incoming_call_id)
-                related_incoming_call.contacted_at = timezone.now()
-                related_incoming_call.save(update_fields=['contacted_at'])
-                print(f"[INFO] Updated incoming call {related_incoming_call.call_id} with contacted_at timestamp")
-            except IncomingCall.DoesNotExist:
-                print(f"[WARNING] Could not find related incoming call with id {related_incoming_call_id}")
 
         return call
 
