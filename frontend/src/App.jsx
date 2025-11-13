@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 
+// Get API URL from environment variable
+const API_URL = import.meta.env.VITE_API_URL || ''
+
 function App() {
   const [calls, setCalls] = useState([])
   const [loading, setLoading] = useState(true)
@@ -10,7 +13,7 @@ function App() {
   const fetchPendingCalls = async () => {
     try {
       // Get missed incoming calls that haven't been contacted (contacted_at is null)
-      const response = await fetch('/api/incoming-calls/missed/')
+      const response = await fetch(`${API_URL}/api/incoming-calls/missed/`)
       const data = await response.json()
 
       // Filter to only show calls that haven't been contacted yet
