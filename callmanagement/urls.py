@@ -9,7 +9,7 @@ from .views import (
 
 # Create router and register viewsets
 router = DefaultRouter()
-router.register(r'calls', IncomingCallViewSet, basename='call')
+router.register(r'incoming-calls', IncomingCallViewSet, basename='call')
 router.register(r'dispositions', CallDispositionViewSet, basename='disposition')
 router.register(r'notes', CallNoteViewSet, basename='note')
 
@@ -17,9 +17,6 @@ urlpatterns = [
     # Webhook endpoint for Tata Dealer
     path('webhook/', WebhookViewSet.as_view({'post': 'create'}), name='webhook'),
 
-    # Alias for incoming-calls (same as webhook)
-    path('incoming-calls/', WebhookViewSet.as_view({'post': 'create'}), name='incoming-calls'),
-
-    # Include router URLs
+    # Include router URLs (this will handle GET requests to /incoming-calls/)
     path('', include(router.urls)),
 ]
