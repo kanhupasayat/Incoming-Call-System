@@ -21,7 +21,24 @@ function App() {
         call => !call.contacted_at && call.call_direction === 'inbound'
       )
 
-      setCalls(uncontactedCalls)
+      // Remove duplicates - keep only the latest call per number
+      const uniqueCalls = []
+      const seenNumbers = new Set()
+
+      // Sort by call_start_time descending (latest first)
+      const sortedCalls = [...uncontactedCalls].sort((a, b) =>
+        new Date(b.call_start_time) - new Date(a.call_start_time)
+      )
+
+      for (const call of sortedCalls) {
+        const normalizedNumber = call.caller_number.trim().replace(/\D/g, '').slice(-10)
+        if (!seenNumbers.has(normalizedNumber)) {
+          seenNumbers.add(normalizedNumber)
+          uniqueCalls.push(call)
+        }
+      }
+
+      setCalls(uniqueCalls)
       setLoading(false)
     } catch (error) {
       console.error('Error fetching calls:', error)
@@ -82,11 +99,6 @@ function App() {
     return `${exactDate} at ${exactTime}`
   }
 
-  // Count calls from same number
-  const getCallCount = (number) => {
-    return calls.filter(call => call.caller_number.trim() === number.trim()).length
-  }
-
   if (loading) {
     return (
       <div className="container">
@@ -113,9 +125,7 @@ function App() {
         </div>
       ) : (
         <div className="calls-list">
-          {calls.map((call) => {
-            const callCount = getCallCount(call.caller_number)
-            return (
+          {calls.map((call) => (
               <div key={call.id} className="call-card">
                 <div className="call-info">
                   <div className="phone-section">
@@ -130,11 +140,6 @@ function App() {
 
                   <div className="meta-info">
                     <span className="time">⏰ {formatTime(call.call_start_time)}</span>
-                    {callCount > 1 && (
-                      <span className="call-count">
-                        🔔 {callCount} calls from this number
-                      </span>
-                    )}
                     {call.caller_name && (
                       <span className="caller-name">👤 {call.caller_name}</span>
                     )}
@@ -146,8 +151,7 @@ function App() {
                   </div>
                 </div>
               </div>
-            )
-          })}
+            ))}
         </div>
       )}
 
